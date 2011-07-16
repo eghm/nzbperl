@@ -268,21 +268,24 @@ if($quitnow){# Do some cleanups
 	}
 }
 
-# TODO: Clean up server socket for remote control schtuff
+shutdownNzb();
 
-disconnectAll();
-pc("Waiting for file decoding thread(s) to terminate...\n", 'bold white');
-foreach my $i (1..$dthreadct){
-	# Send a quit now message for each decoder thread.
-	usingThreadedDecoding() and $decQ->enqueue('quit now');
+# TODO: Clean up server socket for remote control schtuff
+sub shutdownNzb {
+	disconnectAll();
+	pc("Waiting for file decoding thread(s) to terminate...\n", 'bold white');
+	foreach my $i (1..$dthreadct){
+		# Send a quit now message for each decoder thread.
+		usingThreadedDecoding() and $decQ->enqueue('quit now');
+	}
+	foreach my $i (0..$dthreadct-1){
+		# Now join on every decoder thread, waiting for all to finish
+		usingThreadedDecoding() and $decThreads[$i]->join;
+	}
+	pc("Thanks for using ", 'bold yellow');
+	pc("nzbperl", 'bold red');
+	pc("! Enjoy!\n\n", 'bold yellow');	
 }
-foreach my $i (0..$dthreadct-1){
-	# Now join on every decoder thread, waiting for all to finish
-	usingThreadedDecoding() and $decThreads[$i]->join;
-}
-pc("Thanks for using ", 'bold yellow');
-pc("nzbperl", 'bold red');
-pc("! Enjoy!\n\n", 'bold yellow');
 
 #########################################################################################
 # no_more_work_to_do - returns 1 if there is more work to do, 0 otherwise.  Used to 
@@ -379,7 +382,7 @@ sub doReceiverPart {
 				}
 			}
 
-			if(($recvret < 0) or !length($buff)){
+			if((!$recvret or $recvret < 0) or !length($buff)){
 				# TODO: Determine how to gracefully handle the crap we've already downloaded 
 				if (ref($conn->{'sock'}) eq "IO::Socket::SSL") {
 					$conn->{'sock'}->shutdown( 2 );
@@ -1113,6 +1116,13 @@ sub handleRcClientCmd {
 	if($cmd =~ /ping/i){
 		$responsemsg = sprintf("PONG! %s", $params);
 	}
+	elsif($cmd =~ /^shutdown/i){
+		sendRemoteResponse($client, "Shutting down.  Nice having ya.");
+		$client->{'closenow'} = 1;
+		quit();
+		shutdownNzb();
+		return;
+	}
 	elsif($cmd =~ /^quit/i){
 		sendRemoteResponse($client, "Nice having ya.");
 		$client->{'closenow'} = 1;
@@ -1558,11 +1568,7 @@ sub handleKey {
 
 	my $key = shift;
 	if($key =~ /q/){
-		$quitnow = 1;
-		statMsg("User forced quit...exiting...");
-		# TODO: Close open files and delete parts files.
-		drawStatusMsgs();
-		updateBWStartPts();
+		quit();
 	}
 	elsif($key =~ /1/){
 		$targkBps = $lowbw;
@@ -1615,6 +1621,13 @@ sub handleKey {
 	}
 }
 
+sub quit() {
+	$quitnow = 1;
+	statMsg("User forced quit...exiting...");
+	# TODO: Close open files and delete parts files.
+	drawStatusMsgs();
+	updateBWStartPts();	
+}
 
 #########################################################################################
 # When the bandwidth changes, update all bw baselines for all connections
@@ -2862,4 +2875,3 @@ if($errmsg and (length($errmsg))){
 }
 
 }
-
