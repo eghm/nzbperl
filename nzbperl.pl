@@ -446,6 +446,9 @@ sub spoolOutConnBuffData {
 		# Try and detect the "real" filename
 		if(not $conn->{'truefname'}){
 			my $tfn = getTrueFilename($line);
+                        if(!$tfn){
+                            $tfn = "$1.error";
+                        }
 			if($tfn){
 				$conn->{'truefname'} = $tfn;
 				statMsg("Conn. $i: Found true filename: $tfn");
